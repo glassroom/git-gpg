@@ -1,0 +1,374 @@
+#!/usr/bin/env python
+
+HELP_TEXT = """
+    git-gpg utility // Rusty Klophaus, April 2014. // Distributed under the MIT License.
+
+    OVERVIEW
+
+    git-gpg streamlines the workflow for working with an encrypted remote
+    repository.
+
+    The approach is fairly simple: the *entire* repository is tarred into a
+    single file, then compressed, encrypted and uploaded to a remote file.
+
+    To commit new changes, the system downloads the remote archive, decrypts
+    and expands it, adds the changes, and then repeats the process of tarring,
+    compressing, and encrypting and uploading.
+
+    This may sound a bit brute force, but other, more "efficient" approaches
+    such as encrypting individual files could potentially leak information
+    about the contents of the repository.
+
+    USAGE
+
+    # Add a gpg encrypted remote.
+    git gpg add REMOTE_NAME ARCHIVE_PATH
+    git gpg add myremote user@server:~/files/project.gpg
+
+    # Remove a gpg encrypted remote.
+    git gpg remove REMOTE_NAME
+    git gpg remove myremote
+
+    # Pull the latest changes from a remote encrypted archive.
+    git gpg pull GIT_OPTIONS REMOTE_NAME
+    git gpg pull --rebase myremote
+
+    # Push the current branch to a remote encrypted archive.
+    git gpg push GIT_OPTIONS REMOTE_NAME
+    ie: git gpg push --verbose myremote
+
+    OTHER TIPS
+
+    The gpg recipient is taken from the current git user. Change the gpg
+    recipient by editing the .git/config file.
+"""
+
+import hashlib
+import os
+import re
+import shutil
+import subprocess
+import sys
+import time
+
+def error_and_exit(s):
+    print(s)
+    exit(-1)
+
+def ensure_path(path):
+    if not os.path.exists(path):
+        os.makedirs(path)
+
+def delete_path(path):
+    if os.path.exists(temp_path):
+        shutil.rmtree(temp_path)
+
+def get_staging_path(remote_name):
+    return os.path.join(".git", "gpg_remotes", remote_name)
+
+def assert_git_directory():
+    """
+    Exit with error if we are not in a git repo.
+    """
+    if not os.path.isdir(".git"):
+        error_and_exit("Not in a git repository.")
+
+def assert_remote_exists(remote_name):
+    """
+    Exit with error if the remote is missing or not configured correctly.
+    """
+    staging_path = get_staging_path(remote_name)
+    if not os.path.exists(staging_path):
+        error_and_exit("Missing '%s'." % staging_path)
+
+def assert_remote_unchanged(remote_name):
+    """
+    Exit with error if the remote repo has been updated since we last pulled changes.
+    """
+    do_fetch_remote_lock(remote_name)
+    if get_config(remote_name, "remote-lock") != get_config(remote_name, "local-lock"):
+        error_and_exit("The gpg remote may have changed. Run `git gpg pull %s`" % remote_name)
+
+def get_remote_archive_path(args):
+    """
+    Return the remote archive path specified on the command line.
+    """
+    if len(sys.argv) < 2:
+        error_and_exit("Must provide a remote archive remote path.")
+    return sys.argv[1]
+
+def get_current_git_branch():
+    """
+    Return the current git branch.
+    """
+    return subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"]).strip()
+
+def set_config(remote_name, key, value):
+    new_key = "gpg-remote.%s.%s" % (remote_name, key)
+    subprocess.check_call(["git", "config", "--local", new_key, value])
+
+def get_config(remote_name, key):
+    new_key = "gpg-remote.%s.%s" % (remote_name, key)
+    p = subprocess.Popen(["git", "config", new_key], stdout = subprocess.PIPE)
+    p.wait()
+    if p.returncode == 0:
+        return p.communicate()[0].strip()
+    else:
+        return None
+
+def unset_config(remote_name, key):
+    new_key = "gpg-remote.%s.%s" % (remote_name, key)
+    subprocess.check_output(["git", "config", "--unset", new_key])
+
+def get_user_email():
+    return subprocess.check_output(["git", "config", "user.email"]).strip()
+
+def generate_lock_value():
+    s = get_user_email() + str(time.time()*1000000)
+    return hashlib.md5(s).hexdigest()
+
+def rewrite_git_arguments(args):
+    """
+    Given a list of git arguments, rewrite the arguments to replace the remote
+    gpg name with the staging repository path.
+
+    Return (remote_name, new_args).
+    """
+    # Get a list of all remotes.
+    remotes = []
+    for line in subprocess.check_output(["git", "config", "--get-regexp", "gpg-remote.*"]).split("\n"):
+        m = re.match(".*\.(.*)\..* .*", line)
+        if m != None:
+            remotes.append(m.group(1))
+
+    # Rewrite the pull args to replace remote name with the staging repository path.
+    remote_name = None
+    new_args = []
+    args = list(args)
+    while len(args) > 0:
+        arg = args.pop(0)
+        if arg in remotes:
+            remote_name = arg
+            staging_repo_path = os.path.join(get_staging_path(remote_name), "git")
+            new_args.append(staging_repo_path)
+        else:
+            new_args.append(arg)
+    new_args.extend(args)
+
+    # Ensure that we have found a remote name.
+    if remote_name == None:
+        error_and_exit("Could not find a gpg remote by that name.")
+
+    # Return.
+    return (remote_name, new_args)
+
+###
+# Commands
+###
+
+def do_help():
+    print(HELP_TEXT)
+
+def do_add(remote_name, remote_archive_path):
+    """
+    Add an encrypted remote repository.
+    """
+    assert_git_directory()
+
+    # Assemble some paths.
+    path = get_staging_path(remote_name)
+    if os.path.exists(path):
+        error_and_exit("The remote name '%s' already exists." % remote_name)
+    ensure_path(path)
+
+    # Set configuration.
+    user_email = get_user_email()
+    set_config(remote_name, "url", remote_archive_path)
+    set_config(remote_name, "gpg-recipient", user_email)
+
+    print(get_config(remote_name, "url"))
+
+    # Success!
+    print("Added gpg remote '%s'." % remote_name)
+
+def do_remove(remote_name):
+    """
+    Remove an encrypted remote repository."
+    """
+    assert_git_directory()
+
+    # Remove the files.
+    path = get_staging_path(remote_name)
+    delete_path(path)
+
+    # Unset configuration.
+    unset_config(remote_name, "url")
+    unset_config(remote_name, "gpg-recipient")
+
+    # Success!
+    print("Removed gpg remote '%s'." % remote_name)
+
+def do_fetch_remote_lock(remote_name):
+    """
+    Refresh the lock value.
+    """
+
+    # Prepare some vars.
+    remote_lock_path = get_config(remote_name, "url") + ".lock"
+    staging_path     = get_staging_path(remote_name)
+    local_lock_path  = os.path.join(staging_path, "remote.git.tgz.gpg") + ".lock"
+
+    # Fetch the remote lock value.
+    if subprocess.call(["rsync", remote_lock_path, local_lock_path], stdout = subprocess.PIPE, stderr = subprocess.PIPE) == 0:
+        with open(local_lock_path, 'r') as f:
+            lock_value = f.read()
+        set_config(remote_name, "remote-lock", lock_value)
+    else:
+        lock = generate_lock_value()
+        set_config(remote_name, "local-lock", lock)
+        set_config(remote_name, "remote-lock", lock)
+
+def do_push_local_lock(remote_name):
+    # Prepare some vars.
+    remote_lock_path = get_config(remote_name, "url") + ".lock"
+    staging_path     = get_staging_path(remote_name)
+    local_lock_path  = os.path.join(staging_path, "remote.git.tgz.gpg") + ".lock"
+    lock_value       = get_config(remote_name, "local-lock")
+
+    # Write the lock value.
+    with open(local_lock_path, 'w') as f:
+        f.write(lock_value)
+
+    # Fetch the remote lock value.
+    if subprocess.call(["rsync", local_lock_path, remote_lock_path], stdout = subprocess.PIPE, stderr = subprocess.PIPE) != 0:
+        error_and_exit("Could not update the remote lock.")
+
+def do_fetch(remote_name):
+    """
+    Download the remote archive.
+    Decrypt, gunzip, and untar the file into the staging repository.
+    """
+    assert_git_directory()
+    assert_remote_exists(remote_name)
+
+    # Prepare some vars.
+    remote_archive_path = get_config(remote_name, "url")
+    staging_path        = get_staging_path(remote_name)
+    local_archive_path  = os.path.join(staging_path, "remote.git.tgz.gpg")
+    gpg_recipient       = get_config(remote_name, "gpg-recipient")
+
+    # Fetch the code.
+    if subprocess.call(["rsync", remote_archive_path, local_archive_path]) == 0:
+        p1 = subprocess.Popen(["gpg", "--quiet", "--decrypt", "--recipient", gpg_recipient, local_archive_path], stdout = subprocess.PIPE)
+        p2 = subprocess.Popen(["tar", "-zx", "-C", staging_path], stdin = p1.stdout)
+        p1.stdout.close()
+        p1.wait()
+        p2.wait()
+        if p1.returncode != 0:
+            error_and_exit("Could not decrypt '%s'" % local_archive_path)
+        if p2.returncode != 0:
+            error_and_exit("Could not expand '%s'" % local_archive_path)
+
+        # Fetch the remote lock and update the local lock.
+        do_fetch_remote_lock(remote_name)
+        set_config(remote_name, "local-lock", get_config(remote_name, "remote-lock"))
+
+        # Success!
+        print("Fetched from gpg remote '%s'." % remote_name)
+    else:
+        staging_repo_path = os.path.join(staging_path, "git")
+        subprocess.call(["git", "init", "--bare", staging_repo_path])
+        print("Initialized new gpg remote '%s'." % remote_name)
+
+def do_upload(remote_name):
+    """
+    Tar, gzip, and encrypt the staging repository.
+    Upload to the remote archive.
+    """
+    assert_git_directory()
+    assert_remote_exists(remote_name)
+    assert_remote_unchanged(remote_name)
+
+    # Prepare some vars.
+    remote_archive_path = get_config(remote_name, "url")
+    staging_path        = get_staging_path(remote_name)
+    local_archive_path  = os.path.join(staging_path, "remote.git.tgz.gpg")
+    gpg_recipient       = get_config(remote_name, "gpg-recipient")
+
+    # Remove the local archive path if it exists.
+    if os.path.exists(local_archive_path):
+        os.remove(local_archive_path)
+
+    # Create the archive.
+    p1 = subprocess.Popen(["tar", "-cz", "-C", staging_path, "git"], stdout = subprocess.PIPE)
+    p2 = subprocess.Popen(["gpg", "--quiet", "--encrypt", "--recipient", gpg_recipient, "--output", local_archive_path], stdin = p1.stdout)
+    p1.stdout.close()
+    p1.wait()
+    p2.wait()
+    if p1.returncode != 0:
+        error_and_exit("Could not tar '%s'." % os.path.join(staging_path, "git"))
+    if p2.returncode != 0:
+        error_and_exit("Could not encrypt '%s'." % os.path.join(staging_path, "git"))
+
+    # Upload the archive.
+    if subprocess.call(["rsync", "--delay-updates", local_archive_path, remote_archive_path]) != 0:
+        error_and_exit("Could not upload '%s' to '%s'." % (local_archive_path, remote_archive_path))
+
+
+    # Generate a lock. Set the local and remote lock.
+    new_lock = generate_lock_value()
+    set_config(remote_name, "remote-lock", new_lock)
+    set_config(remote_name, "local-lock", new_lock)
+    do_push_local_lock(remote_name)
+
+    # Success!
+    print("Uploaded to gpg remote '%s'." % remote_name)
+
+def do_pull(*args):
+    """
+    Fetch changes from the remote archive into our staging
+    repository, then pull them into the local repository.
+    """
+    assert_git_directory()
+
+    # Process the args.
+    remote_name, git_arguments = rewrite_git_arguments(args)
+
+    # Fetch from the remote repo into the staging repository.
+    do_fetch(remote_name)
+
+    # Pull from staging repository into our local repository.
+    if subprocess.call(["git", "pull"] + git_arguments) == 0:
+        print("Pulled from gpg remote '%s'." % remote_name)
+
+def do_push(*args):
+    """
+    Push changes from the local repository into the staging repository, then
+    push them to the remote archive.
+    """
+    assert_git_directory()
+
+    # Process the args.
+    remote_name, git_arguments = rewrite_git_arguments(args)
+
+    # Make sure the remote hasn't changed.
+    assert_remote_unchanged(remote_name)
+
+    # Push from our local repository into the staging repository.
+    if subprocess.call(["git", "push"] + git_arguments) == 0:
+        do_upload(remote_name)
+        print("Pushed to gpg remote '%s'." % remote_name)
+
+###
+# Run
+###
+# Calls do_add, do_remove, do_pull, etc.
+script_name = sys.argv.pop(0)
+if len(sys.argv) == 0:
+    do_help()
+else:
+    locals()["do_" + sys.argv.pop(0)](*sys.argv)
+
+
+
+
