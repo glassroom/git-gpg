@@ -1,46 +1,19 @@
 #!/usr/bin/env python
 
 HELP_TEXT = """
-    git-gpg utility // Rusty Klophaus, April 2014. // Distributed under the MIT License.
+git-gpg - remote encrypted git repositories.
 
-    OVERVIEW
+Usage:
 
-    git-gpg streamlines the workflow for working with an encrypted remote
-    repository.
+  git gpg add REMOTE_NAME ARCHIVE_PATH
 
-    The approach is fairly simple: the *entire* repository is tarred into a
-    single file, then compressed, encrypted and uploaded to a remote file.
+  git gpg remove REMOTE_NAME
 
-    To commit new changes, the system downloads the remote archive, decrypts
-    and expands it, adds the changes, and then repeats the process of tarring,
-    compressing, and encrypting and uploading.
+  git gpg push [OPTIONS] REMOTE_NAME [REFSPEC]
+  - See `git help push` for options.
 
-    This may sound a bit brute force, but other, more "efficient" approaches
-    such as encrypting individual files could potentially leak information
-    about the contents of the repository.
-
-    USAGE
-
-    # Add a gpg encrypted remote.
-    git gpg add REMOTE_NAME ARCHIVE_PATH
-    git gpg add myremote user@server:~/files/project.gpg
-
-    # Remove a gpg encrypted remote.
-    git gpg remove REMOTE_NAME
-    git gpg remove myremote
-
-    # Pull the latest changes from a remote encrypted archive.
-    git gpg pull GIT_OPTIONS REMOTE_NAME
-    git gpg pull --rebase myremote
-
-    # Push the current branch to a remote encrypted archive.
-    git gpg push GIT_OPTIONS REMOTE_NAME
-    ie: git gpg push --verbose myremote
-
-    OTHER TIPS
-
-    The gpg recipient is taken from the current git user. Change the gpg
-    recipient by editing the .git/config file.
+  git gpg pull [OPTIONS] REMOTE_NAME [REFSPEC]
+  - See `git help pull` for options.
 """
 
 import hashlib
@@ -60,8 +33,8 @@ def ensure_path(path):
         os.makedirs(path)
 
 def delete_path(path):
-    if os.path.exists(temp_path):
-        shutil.rmtree(temp_path)
+    if os.path.exists(path):
+        shutil.rmtree(path)
 
 def get_staging_path(remote_name):
     return os.path.join(".git", "gpg_remotes", remote_name)
@@ -89,12 +62,12 @@ def assert_remote_unchanged(remote_name):
     if get_config(remote_name, "remote-lock") != get_config(remote_name, "local-lock"):
         error_and_exit("The gpg remote may have changed. Run `git gpg pull %s`" % remote_name)
 
-def get_remote_archive_path(args):
+def get_remote_blob_path(args):
     """
-    Return the remote archive path specified on the command line.
+    Return the remote blob path specified on the command line.
     """
     if len(sys.argv) < 2:
-        error_and_exit("Must provide a remote archive remote path.")
+        error_and_exit("Must provide a remote blob remote path.")
     return sys.argv[1]
 
 def get_current_git_branch():
@@ -169,7 +142,7 @@ def rewrite_git_arguments(args):
 def do_help():
     print(HELP_TEXT)
 
-def do_add(remote_name, remote_archive_path):
+def do_add(remote_name, remote_blob_path):
     """
     Add an encrypted remote repository.
     """
@@ -183,7 +156,7 @@ def do_add(remote_name, remote_archive_path):
 
     # Set configuration.
     user_email = get_user_email()
-    set_config(remote_name, "url", remote_archive_path)
+    set_config(remote_name, "url", remote_blob_path)
     set_config(remote_name, "gpg-recipient", user_email)
 
     print(get_config(remote_name, "url"))
@@ -216,7 +189,7 @@ def do_fetch_remote_lock(remote_name):
     # Prepare some vars.
     remote_lock_path = get_config(remote_name, "url") + ".lock"
     staging_path     = get_staging_path(remote_name)
-    local_lock_path  = os.path.join(staging_path, "remote.git.tgz.gpg") + ".lock"
+    local_lock_path  = os.path.join(staging_path, "remote.gpg") + ".lock"
 
     # Fetch the remote lock value.
     if subprocess.call(["rsync", remote_lock_path, local_lock_path], stdout = subprocess.PIPE, stderr = subprocess.PIPE) == 0:
@@ -232,7 +205,7 @@ def do_push_local_lock(remote_name):
     # Prepare some vars.
     remote_lock_path = get_config(remote_name, "url") + ".lock"
     staging_path     = get_staging_path(remote_name)
-    local_lock_path  = os.path.join(staging_path, "remote.git.tgz.gpg") + ".lock"
+    local_lock_path  = os.path.join(staging_path, "remote.gpg") + ".lock"
     lock_value       = get_config(remote_name, "local-lock")
 
     # Write the lock value.
@@ -245,29 +218,23 @@ def do_push_local_lock(remote_name):
 
 def do_fetch(remote_name):
     """
-    Download the remote archive.
-    Decrypt, gunzip, and untar the file into the staging repository.
+    Download the remote blob.
+    Decrypt the blob into the staging repository.
     """
     assert_git_directory()
     assert_remote_exists(remote_name)
 
     # Prepare some vars.
-    remote_archive_path = get_config(remote_name, "url")
-    staging_path        = get_staging_path(remote_name)
-    local_archive_path  = os.path.join(staging_path, "remote.git.tgz.gpg")
-    gpg_recipient       = get_config(remote_name, "gpg-recipient")
+    remote_blob_path = get_config(remote_name, "url")
+    staging_path     = get_staging_path(remote_name)
+    local_blob_path  = os.path.join(staging_path, "remote.gpg")
+    gpg_recipient    = get_config(remote_name, "gpg-recipient")
 
-    # Fetch the code.
-    if subprocess.call(["rsync", remote_archive_path, local_archive_path]) == 0:
-        p1 = subprocess.Popen(["gpg", "--quiet", "--decrypt", "--recipient", gpg_recipient, local_archive_path], stdout = subprocess.PIPE)
-        p2 = subprocess.Popen(["tar", "-zx", "-C", staging_path], stdin = p1.stdout)
-        p1.stdout.close()
-        p1.wait()
-        p2.wait()
-        if p1.returncode != 0:
-            error_and_exit("Could not decrypt '%s'" % local_archive_path)
-        if p2.returncode != 0:
-            error_and_exit("Could not expand '%s'" % local_archive_path)
+    # Fetch the blob.
+    if subprocess.call(["rsync", "--progress", remote_blob_path, local_blob_path]) == 0:
+        # Get the blob, now decrypt it.
+        if subprocess.call(["gpg-zip", "--decrypt", "--recipient", gpg_recipient, "remote.gpg"], cwd=staging_path) != 0:
+            error_and_exit("Could not decrypt '%s'" % local_blob_path)
 
         # Fetch the remote lock and update the local lock.
         do_fetch_remote_lock(remote_name)
@@ -283,37 +250,41 @@ def do_fetch(remote_name):
 def do_upload(remote_name):
     """
     Tar, gzip, and encrypt the staging repository.
-    Upload to the remote archive.
+    Upload to the remote blob.
     """
     assert_git_directory()
     assert_remote_exists(remote_name)
+
+    # Ensure that we know about the latest copy of the blob.
     assert_remote_unchanged(remote_name)
 
+    # Update the lock. We do this first so that if other processes have tried
+    # to upload changes, then both of them encounter an error and back off.
+    new_lock = generate_lock_value()
+    set_config(remote_name, "local-lock", new_lock)
+    set_config(remote_name, "remote-lock", new_lock)
+    do_push_local_lock(remote_name)
+
     # Prepare some vars.
-    remote_archive_path = get_config(remote_name, "url")
+    remote_blob_path = get_config(remote_name, "url")
     staging_path        = get_staging_path(remote_name)
-    local_archive_path  = os.path.join(staging_path, "remote.git.tgz.gpg")
+    local_blob_path  = os.path.join(staging_path, "remote.gpg")
     gpg_recipient       = get_config(remote_name, "gpg-recipient")
 
-    # Remove the local archive path if it exists.
-    if os.path.exists(local_archive_path):
-        os.remove(local_archive_path)
+    # Remove the local blob path if it exists.
+    if os.path.exists(local_blob_path):
+        os.remove(local_blob_path)
 
-    # Create the archive.
-    p1 = subprocess.Popen(["tar", "-cz", "-C", staging_path, "git"], stdout = subprocess.PIPE)
-    p2 = subprocess.Popen(["gpg", "--quiet", "--encrypt", "--recipient", gpg_recipient, "--output", local_archive_path], stdin = p1.stdout)
-    p1.stdout.close()
-    p1.wait()
-    p2.wait()
-    if p1.returncode != 0:
-        error_and_exit("Could not tar '%s'." % os.path.join(staging_path, "git"))
-    if p2.returncode != 0:
+    # Create the blob.
+    if subprocess.call(["gpg-zip", "--encrypt", "--recipient", gpg_recipient, "--output", "remote.gpg", "git"], cwd=staging_path) != 0:
         error_and_exit("Could not encrypt '%s'." % os.path.join(staging_path, "git"))
 
-    # Upload the archive.
-    if subprocess.call(["rsync", "--delay-updates", local_archive_path, remote_archive_path]) != 0:
-        error_and_exit("Could not upload '%s' to '%s'." % (local_archive_path, remote_archive_path))
+    # Upload the blob.
+    if subprocess.call(["rsync", "--progress", "--delay-updates", local_blob_path, remote_blob_path]) != 0:
+        error_and_exit("Could not upload '%s' to '%s'." % (local_blob_path, remote_blob_path))
 
+    # Ensure that we know about the latest copy of the blob.
+    assert_remote_unchanged(remote_name)
 
     # Generate a lock. Set the local and remote lock.
     new_lock = generate_lock_value()
@@ -326,7 +297,7 @@ def do_upload(remote_name):
 
 def do_pull(*args):
     """
-    Fetch changes from the remote archive into our staging
+    Fetch changes from the remote blob into our staging
     repository, then pull them into the local repository.
     """
     assert_git_directory()
@@ -344,7 +315,7 @@ def do_pull(*args):
 def do_push(*args):
     """
     Push changes from the local repository into the staging repository, then
-    push them to the remote archive.
+    push them to the remote blob.
     """
     assert_git_directory()
 
@@ -353,6 +324,13 @@ def do_push(*args):
 
     # Make sure the remote hasn't changed.
     assert_remote_unchanged(remote_name)
+
+    # Make sure we have a local repo.
+    staging_path     = get_staging_path(remote_name)
+    staging_repo_path = os.path.join(staging_path, "git")
+    if not os.path.exists(staging_repo_path):
+        subprocess.call(["git", "init", "--bare", staging_repo_path])
+        print("Initialized new gpg remote '%s'." % remote_name)
 
     # Push from our local repository into the staging repository.
     if subprocess.call(["git", "push"] + git_arguments) == 0:
