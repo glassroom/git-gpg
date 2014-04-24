@@ -23,6 +23,9 @@ When you push changes, it:
 
 Simple.
 
+It also contains some logic to prevent users from pushing code at the same
+time and clobbering eachothers changes.
+
 Note: Even readers of below-average intelligence will notice that *every* push
 or pull operation requires you to transfer a new encrypted blob containing a complete
 copy of your repository. This could get expensive in terms of network traffic.
