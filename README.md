@@ -2,12 +2,12 @@
 
 Put on your [tin-foil hat](http://en.wikipedia.org/wiki/Tin_foil_hat) for a second...
 
-Are you worried about the NSA / Github / your VPS provider stealing your top-
-secret source code? (Remember, you are wearing a tin-foil hat.)
+Are you worried about the NSA / Github / your VPS provider stealing your
+private source code? (Remember, you are wearing a tin-foil hat.)
 
-git-gpg helps protect your precious source code. It lets you securely store
-your git repositories on an untrusted server. At a high level, it works by
-treating the remote repo as a gpg encrypted blob.
+git-gpg helps protect your precious work. It lets you securely store your git
+repositories on an untrusted server. At a high level, it works by treating the
+remote repo as a gpg encrypted blob.
 
 When you pull changes, it:
 
