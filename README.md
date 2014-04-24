@@ -138,3 +138,7 @@ bandwidth efficient than the current version, but it had two main disadvantages:
 + It is possible to have a valid git repository that cannot be re-created by exporting and re-applying all of its constituent patches in order.
 
 The second disadvantage was obviously a show-stopper.
+
+# Licence
+
+git-gpg is released under the MIT License.
