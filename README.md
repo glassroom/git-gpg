@@ -80,7 +80,7 @@ and a "smudge filter" that will run right after a file is checked out. One of
 the intended use cases is to transform files from Unix line endings to and
 Windows line endings and vice versa.
 
-Some clenver folks have hacked this so that the clien filter decrypts a file,
+Some clever folks have hacked this so that the client filter decrypts a file,
 and the smudge filter encrypts the file. While this is clever, it is not
 recommended:
 
@@ -122,20 +122,19 @@ some of this sentiment:
 #### An Encrypted Remote FileSystem
 
 Another approach is to store the remote git repo on an encrypted filesystem,
-and then mount it when committing or fetching code. This forces an intruder
-must to properly time their attack to happen when the code is decrypted. This
-raises the difficulty level, but still leaves a large attack vector. If you
-are *truly* paranoid about your code, then it's dangerous to *ever* decrypt it
+and then mount it when pushing or pulling code. An intruder must time their
+attack to happen when the code is decrypted in memory. This raises the
+difficulty level, but still leaves a significant weak surface. If you are
+*truly* paranoid about your code, then it's dangerous to *ever* decrypt it
 anywhere except for on your own computer.
 
 #### Encrypted Patches
 
-A previous version of git-gpg attempted to use network bandwidth more
-efficiently by transmitting and storing encrypted patches rather treating the
-entire repository as a single blob. One disadvantage to this approach was that
-consumers had different commit hashes because git patches don't presenve the
-hash.
+A previous version of this utility attempted transmit and store encrypted
+patches rather treating the entire repository as a single blob. The was more
+bandwidth efficient than the current version, but it had two main disadvantages:
 
-But the main showstopper was that it is possible to have a valid git
-repository that cannot be re-created by exporting and re-applying all of its
-constituent patches in order.
++ Patches don't preserve the commit hash, so different consumers of the repo saw different hashes.
++ It is possible to have a valid git repository that cannot be re-created by exporting and re-applying all of its constituent patches in order.
+
+The second disadvantage was obviously a show-stopper.
