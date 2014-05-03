@@ -5,17 +5,29 @@ git-gpg - remote encrypted git repositories.
 
 Usage:
 
-  git gpg add REMOTE_NAME ARCHIVE_PATH
+    # Add a remote.
+    git gpg add REMOTE_NAME ARCHIVE_PATH
 
-  git gpg remove REMOTE_NAME
+    # Remove a remote.
+    git gpg remove REMOTE_NAME
 
-  git gpg push [OPTIONS] REMOTE_NAME [REFSPEC]
-  - See `git help push` for options.
+    # Show gpg remotes.
+    git gpg show
 
-  git gpg pull [OPTIONS] REMOTE_NAME [REFSPEC]
-  - See `git help pull` for options.
+    # Show details of a gpg remote.
+    git gpg show REMOTE_NAME
+
+    # Push to a remote. See `git help push` for options.
+    git gpg push [OPTIONS] REMOTE_NAME [REFSPEC]
+
+    # Pull from a remote. See `git help push` for options.
+    git gpg pull [OPTIONS] REMOTE_NAME [REFSPEC]
+
+    # Show this screen.
+    git gpg help
 """
 
+import glob
 import hashlib
 import os
 import re
@@ -62,7 +74,7 @@ def assert_remote_unchanged(remote_name):
     if get_config(remote_name, "remote-lock") != get_config(remote_name, "local-lock"):
         error_and_exit("The gpg remote may have changed. Run `git gpg pull %s`" % remote_name)
 
-def get_remote_blob_path(args):
+def get_remote_repo_path(args):
     """
     Return the remote blob path specified on the command line.
     """
@@ -91,10 +103,23 @@ def get_config(remote_name, key):
 
 def unset_config(remote_name, key):
     new_key = "gpg-remote.%s.%s" % (remote_name, key)
-    subprocess.check_output(["git", "config", "--unset", new_key])
+    subprocess.call(["git", "config", "--unset", new_key])
 
 def get_user_email():
     return subprocess.check_output(["git", "config", "user.email"]).strip()
+
+def get_remotes_list():
+    remotes = []
+    try:
+        output = subprocess.check_output(["git", "config", "--get-regexp", "gpg-remote.*"])
+    except:
+        output = ""
+
+    for line in output.split("\n"):
+        m = re.match(".*\.(.*)\..* .*", line)
+        if m != None:
+            remotes.append(m.group(1))
+    return sorted(list(set(remotes)))
 
 def generate_lock_value():
     s = get_user_email() + str(time.time()*1000000)
@@ -107,23 +132,20 @@ def rewrite_git_arguments(args):
 
     Return (remote_name, new_args).
     """
-    # Get a list of all remotes.
-    remotes = []
-    for line in subprocess.check_output(["git", "config", "--get-regexp", "gpg-remote.*"]).split("\n"):
-        m = re.match(".*\.(.*)\..* .*", line)
-        if m != None:
-            remotes.append(m.group(1))
+
+    # Vars.
+    remotes     = get_remotes_list()
+    remote_name = None
+    args        = list(args)
+    new_args    = []
 
     # Rewrite the pull args to replace remote name with the staging repository path.
-    remote_name = None
-    new_args = []
-    args = list(args)
     while len(args) > 0:
         arg = args.pop(0)
         if arg in remotes:
             remote_name = arg
-            staging_repo_path = os.path.join(get_staging_path(remote_name), "git")
-            new_args.append(staging_repo_path)
+            local_repo_path = os.path.join(get_staging_path(remote_name), "git")
+            new_args.append(local_repo_path)
         else:
             new_args.append(arg)
     new_args.extend(args)
@@ -142,7 +164,21 @@ def rewrite_git_arguments(args):
 def do_help():
     print(HELP_TEXT)
 
-def do_add(remote_name, remote_blob_path):
+def do_show(remote_name = None):
+    remotes = get_remotes_list()
+    if remote_name == None:
+        if len(remotes) > 0:
+            print "\n".join(remotes)
+        else:
+            print "No remotes defined."
+    elif not remote_name in remotes:
+        print "Remote '%s' not found." % remote_name
+    else:
+        print "gpg remote %s" % remote_name
+        print "- URL: %s" % get_config(remote_name, "url")
+        print "- GPG Recipient: %s" % get_config(remote_name, "gpg-recipient")
+
+def do_add(remote_name, remote_repo_path):
     """
     Add an encrypted remote repository.
     """
@@ -156,7 +192,7 @@ def do_add(remote_name, remote_blob_path):
 
     # Set configuration.
     user_email = get_user_email()
-    set_config(remote_name, "url", remote_blob_path)
+    set_config(remote_name, "url", remote_repo_path)
     set_config(remote_name, "gpg-recipient", user_email)
 
     print(get_config(remote_name, "url"))
@@ -225,27 +261,78 @@ def do_fetch(remote_name):
     assert_remote_exists(remote_name)
 
     # Prepare some vars.
-    remote_blob_path = get_config(remote_name, "url")
+    remote_repo_path = get_config(remote_name, "url")
     staging_path     = get_staging_path(remote_name)
-    local_blob_path  = os.path.join(staging_path, "remote.gpg")
+    local_gpg_path   = os.path.join(staging_path, "git.gpg")
+    local_repo_path  = os.path.join(staging_path, "git")
     gpg_recipient    = get_config(remote_name, "gpg-recipient")
 
-    # Fetch the blob.
-    if subprocess.call(["rsync", "--progress", remote_blob_path, local_blob_path]) == 0:
-        # Get the blob, now decrypt it.
-        if subprocess.call(["gpg-zip", "--decrypt", "--recipient", gpg_recipient, "remote.gpg"], cwd=staging_path) != 0:
-            error_and_exit("Could not decrypt '%s'" % local_blob_path)
-
-        # Fetch the remote lock and update the local lock.
-        do_fetch_remote_lock(remote_name)
-        set_config(remote_name, "local-lock", get_config(remote_name, "remote-lock"))
-
-        # Success!
-        print("Fetched from gpg remote '%s'." % remote_name)
-    else:
-        staging_repo_path = os.path.join(staging_path, "git")
-        subprocess.call(["git", "init", "--bare", staging_repo_path])
+    # Transfer files from remote.
+    print("Fetching files. This may take a second.")
+    ensure_path(local_gpg_path)
+    if subprocess.call(["rsync", "-am", "--delete", "--delete-excluded", remote_repo_path + "/", local_gpg_path]) != 0:
+        # If it didn't work, then initialize a new bare repository.
+        subprocess.call(["git", "init", "--bare", local_repo_path])
         print("Initialized new gpg remote '%s'." % remote_name)
+
+    # Delete any files in local_repo_path that don't exist in local_gpg_path.
+    paths = []
+    ensure_path(local_repo_path)
+    for root, dirnames, filenames in os.walk(local_repo_path):
+        for file in filenames:
+            path = os.path.join(root, file)
+            if not os.path.isfile(path.replace(local_repo_path, local_gpg_path) + ".gpg"):
+                print("Removing old file %s." % path)
+                os.remove(path)
+
+    # Get a list of files to decrypt.
+    paths = []
+    for root, dirnames, filenames in os.walk(local_gpg_path):
+        for filename in filenames:
+            path = os.path.join(root, filename)
+            output_path = path.replace(local_gpg_path, local_repo_path)[0:-4]
+
+            # Only decrypt .gpg files.
+            if not path.endswith(".gpg"):
+                continue
+
+            # Don't decrypt an object that already exists.
+            if path.find("/objects/") >= 0 and os.path.isfile(output_path):
+                # Don't decrypt an object file that already exists.
+                continue
+
+            # Add to list of files to decrypt.
+            paths.append(path)
+
+    # Decrypt the files.
+    if len(paths) > 0:
+        print("Decrypting files.")
+        if subprocess.call(["gpg", "--decrypt-files", "--quiet", "--recipient", gpg_recipient] + paths) != 0:
+            error_and_exit("Could not decrypt '%s'" % path)
+
+    # Move files and clean up times.
+    for path in paths:
+        # Move file to the correct place.
+        output_path = path.replace(local_gpg_path, local_repo_path)[0:-4]
+        ensure_path(os.path.dirname(output_path))
+        os.rename(path[0:-4], output_path)
+
+        # Fix the modified time.
+        time = os.path.getmtime(path)
+        os.utime(output_path, (time, time))
+
+    # Extract the "refs.tgz" file.
+    refs_path = os.path.join(local_repo_path, "refs.tgz")
+    if subprocess.call(["tar", "-zx", "-f", refs_path, "-C", local_repo_path]) != 0:
+        # error_and_exit("Could not extract %s" % refs_path)
+        print("HERE")
+
+    # Fetch the remote lock and update the local lock.
+    do_fetch_remote_lock(remote_name)
+    set_config(remote_name, "local-lock", get_config(remote_name, "remote-lock"))
+
+    # Success!
+    print("Fetched from gpg remote '%s'." % remote_name)
 
 def do_upload(remote_name):
     """
@@ -266,22 +353,80 @@ def do_upload(remote_name):
     do_push_local_lock(remote_name)
 
     # Prepare some vars.
-    remote_blob_path = get_config(remote_name, "url")
-    staging_path        = get_staging_path(remote_name)
-    local_blob_path  = os.path.join(staging_path, "remote.gpg")
-    gpg_recipient       = get_config(remote_name, "gpg-recipient")
+    remote_repo_path = get_config(remote_name, "url")
+    staging_path     = get_staging_path(remote_name)
+    local_gpg_path   = os.path.join(staging_path, "git.gpg")
+    local_repo_path  = os.path.join(staging_path, "git")
+    gpg_recipient    = get_config(remote_name, "gpg-recipient")
 
-    # Remove the local blob path if it exists.
-    if os.path.exists(local_blob_path):
-        os.remove(local_blob_path)
+    # Ensure paths.
+    ensure_path(local_gpg_path)
+    ensure_path(local_repo_path)
 
-    # Create the blob.
-    if subprocess.call(["gpg-zip", "--encrypt", "--recipient", gpg_recipient, "--output", "remote.gpg", "git"], cwd=staging_path) != 0:
-        error_and_exit("Could not encrypt '%s'." % os.path.join(staging_path, "git"))
+    # Delete any files in local_repo_path that don't exist in local_gpg_path.
+    for root, dirnames, filenames in os.walk(local_gpg_path):
+        for file in filenames:
+            path = os.path.join(root, file)
+            if not os.path.isfile(path.replace(local_gpg_path, local_repo_path)[0:-4]):
+                print("Removing old file %s." % path)
+                os.remove(path)
 
-    # Upload the blob.
-    if subprocess.call(["rsync", "--progress", "--delay-updates", local_blob_path, remote_blob_path]) != 0:
-        error_and_exit("Could not upload '%s' to '%s'." % (local_blob_path, remote_blob_path))
+    # Create the "refs.tgz" file.
+    refs_path = os.path.join(local_repo_path, "refs.tgz")
+    if subprocess.call(["tar", "-c", "-f", refs_path, "-C", local_repo_path, "refs"]) != 0:
+        error_and_exit("Could not create %s" % refs_path)
+
+    # Get a list of files to encrypt.
+    paths = []
+    for root, dirnames, filenames in os.walk(local_repo_path):
+        for filename in filenames:
+            path = os.path.join(root, filename)
+            output_path = path.replace(local_repo_path, local_gpg_path) + ".gpg"
+
+            # Only encrypt actual files.
+            if os.path.isdir(path):
+                continue
+
+            # Only encrypt files in certain paths.
+            if not path.find("/HEAD") >= 0 and \
+                not path.find("/refs.tgz") >= 0 and \
+                not path.find("/packed-refs") >= 0 and \
+                not path.find("/objects/") >= 0:
+                continue
+
+            # Don't encrypt already encrypted object files.
+            if path.find("/objects/") >= 0 and os.path.exists(output_path):
+                continue
+
+            # Add to list for encryption.
+            paths.append(path)
+
+    if len(paths) > 0:
+        # Encrypt the files.
+        print("Encrypting files...")
+        if subprocess.call(["gpg", "--batch", "--yes", "--encrypt-files", "--recipient", gpg_recipient] + paths) != 0:
+            error_and_exit("Could not encrypt '%s'." % local_repo_path)
+
+        # Move the files and clean up times.
+        for path in paths:
+            # Move file to the correct place.
+            output_path = path.replace(local_repo_path, local_gpg_path) + ".gpg"
+            ensure_path(os.path.dirname(output_path))
+            os.rename(path + ".gpg", output_path)
+
+            # Update the modification time.
+            time = os.path.getmtime(path)
+            os.utime(output_path, (time, time))
+
+    # Upload the encrypted files.
+    # IMPORTANT: NEVER PUT QUOTES AROUND THE --include OR --exclude FLAGS IN
+    # RSYNC. IT WILL CAUSE THE FLAGS TO BE IGNORED.
+    print("Uploading files. This may take a second.")
+    if subprocess.call([
+        "rsync", "-am", "--delete", "--delete-excluded", "--delay-updates",
+        "--include=*/", "--include=HEAD.gpg", "--include=packed-refs.gpg", "--include=refs.tgz.gpg", "--include=objects/*/*.gpg", "--exclude=*",
+        ".", remote_repo_path], cwd = local_gpg_path) != 0:
+        error_and_exit("Could not upload '%s' to '%s'." % (local_repo_path, remote_repo_path))
 
     # Ensure that we know about the latest copy of the blob.
     assert_remote_unchanged(remote_name)
@@ -326,10 +471,10 @@ def do_push(*args):
     assert_remote_unchanged(remote_name)
 
     # Make sure we have a local repo.
-    staging_path     = get_staging_path(remote_name)
-    staging_repo_path = os.path.join(staging_path, "git")
-    if not os.path.exists(staging_repo_path):
-        subprocess.call(["git", "init", "--bare", staging_repo_path])
+    staging_path    = get_staging_path(remote_name)
+    local_repo_path = os.path.join(staging_path, "git")
+    if not os.path.exists(local_repo_path):
+        subprocess.call(["git", "init", "--bare", local_repo_path])
         print("Initialized new gpg remote '%s'." % remote_name)
 
     # Push from our local repository into the staging repository.
@@ -343,10 +488,10 @@ def do_push(*args):
 # Calls do_add, do_remove, do_pull, etc.
 script_name = sys.argv.pop(0)
 if len(sys.argv) == 0:
-    do_help()
+    do_show()
 else:
-    locals()["do_" + sys.argv.pop(0)](*sys.argv)
-
-
-
-
+    method = "do_" + sys.argv.pop(0)
+    if method in locals():
+        locals()[method](*sys.argv)
+    else:
+        print "'%s' is not a valid command. Run 'git gpg help' for help." % method

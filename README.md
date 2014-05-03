@@ -6,30 +6,21 @@ Are you worried about the NSA / Github / your VPS provider stealing your
 private source code? (Remember, you are wearing a tin-foil hat.)
 
 git-gpg helps protect your precious work. It lets you securely store your git
-repositories on an untrusted server. At a high level, it works by treating the
-remote repo as a gpg encrypted blob.
+repositories on an untrusted server.
 
 When you pull changes, it:
 
-1. Downloads the encrypted blob.
-2. Decrypts it into a staging directory.
-3. Pulls from the staging directory into your local repo.
+1. Runs rsync to download encrypted .git database files from a remote server to a local directory.
+2. Decrypts the .git database files to form a "staging" repository.
+3. Pulls from the staging repository into your local repo.
 
 When you push changes, it:
 
-1. Pushes your local changes into the staging directory.
-2. Encrypts the staging directory into a blob.
-3. Uploads the encrypted blob.
+1. Pushes your local changes into the staging repository.
+2. Encrypts the .git database files in the staging repository.
+3. Runs rsync to upload the encrypted .git database files to the remote server.
 
 Simple.
-
-It also contains some logic to prevent users from pushing code at the same
-time and clobbering eachothers changes.
-
-Note: Even readers of below-average intelligence will notice that *every* push
-or pull operation requires you to transfer a new encrypted blob containing a complete
-copy of your repository. This could get expensive in terms of network traffic.
-You'll probably want to keep the size of your codebase fairly small.
 
 ## Requirements
 
