@@ -1,20 +1,16 @@
 # git-gpg
 
-Put on your [tin-foil hat](http://en.wikipedia.org/wiki/Tin_foil_hat) for a second...
+git-gpg allows you to store private files in a GPG-encrypted remote repository.
 
-Are you worried about the NSA / Github / your VPS provider stealing your
-private source code? (Remember, you are wearing a tin-foil hat.)
+How it works:
 
-git-gpg helps protect your precious work. It lets you securely store your git
-repositories on an untrusted server.
-
-When you pull changes, it:
+When you pull changes, git-gpg...
 
 1. Runs rsync to download encrypted .git database files from a remote server to a local directory.
 2. Decrypts the .git database files to form a "staging" repository.
 3. Pulls from the staging repository into your local repo.
 
-When you push changes, it:
+When you push changes, git-gpg...
 
 1. Pushes your local changes into the staging repository.
 2. Encrypts the .git database files in the staging repository.
@@ -26,37 +22,37 @@ Simple.
 
 To try git-gpg you will need:
 
-+ Git and gpg installed on your system.
-+ A git repository with top secret code.
++ A recent version of git. Tested with 1.9.1.
++ A recent version of gpg. Tested with 1.4.16.
++ A recent version of rsync. Tested with 2.6.9.
 + A gpg private key. For help, see the [gpg cheat sheet](http://irtfweb.ifa.hawaii.edu/~lockhart/gpg/gpg-cs.html).
-+ A healthy sense of paranoia.
++ A git repository.
 
 ## Installation
 
-Copy the `git-gpg` script to a directory in your path. Git will automatically
-use the script when you run a command starting with `git-gpg`
+Copy the `git-gpg` script to a directory in your path.
 
 ## Usage
 
-Add an encrypted remote to an existing git repository:
+Add a a GPG-encrypted remote repository:
 
     git gpg add myremote user@server:~/files/project.gpg
 
-Pull the latest changes:
-
-    git gpg pull myremote
-
-    # You can use standard git options when pulling:
-    git gpg pull --rebase myremote
-
-Push new changes:
+Push to the GPG-encrypted repository:
 
     git gpg push myremote master
 
     # You can use standard git options when pushing:
     git gpg push --verbose myremote master
 
-Note: By default, git-gpg will use the `user.email` setting in git as the gpg
+Pull from the GPG-encrypted repository:
+
+    git gpg pull myremote
+
+    # You can use standard git options when pulling:
+    git gpg pull --rebase myremote
+
+Note: By default, git-gpg will use the `user.email` setting in git as the GPG
 recipient. You can change this by editing the `.git/config` file, or by
 running the following command:
 
