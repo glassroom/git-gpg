@@ -372,7 +372,7 @@ def do_upload(remote_name):
 
     # Create the "refs.tgz" file.
     refs_path = os.path.join(local_repo_path, "refs.tgz")
-    if subprocess.call(["tar", "-c", "-f", refs_path, "-C", local_repo_path, "refs"]) != 0:
+    if subprocess.call(["tar", "-zc", "-f", refs_path, "-C", local_repo_path, "refs"]) != 0:
         error_and_exit("Could not create %s" % refs_path)
 
     # Get a list of files to encrypt.
