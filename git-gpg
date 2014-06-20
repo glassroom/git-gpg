@@ -324,8 +324,7 @@ def do_fetch(remote_name):
     # Extract the "refs.tgz" file.
     refs_path = os.path.join(local_repo_path, "refs.tgz")
     if subprocess.call(["tar", "-zx", "-f", refs_path, "-C", local_repo_path]) != 0:
-        # error_and_exit("Could not extract %s" % refs_path)
-        print("HERE")
+        error_and_exit("Could not extract %s" % refs_path)
 
     # Fetch the remote lock and update the local lock.
     do_fetch_remote_lock(remote_name)
