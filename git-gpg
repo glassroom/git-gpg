@@ -17,6 +17,15 @@ Usage:
     # Show details of a gpg remote.
     git gpg show REMOTE_NAME
 
+    # Add recipient.
+    git gpg add-recipient REMOTE_NAME RECIPIENT
+
+    # Remove recipient.
+    git gpg remove-recipient REMOTE_NAME RECIPIENT
+
+    # Show recipients.
+    git gpg show-recipients REMOTE_NAME
+
     # Push to a remote. See `git help push` for options.
     git gpg push [OPTIONS] REMOTE_NAME [REFSPEC]
 
@@ -88,6 +97,10 @@ def get_current_git_branch():
     """
     return subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"]).strip()
 
+def add_config(remote_name, key, value):
+    new_key = "gpg-remote.%s.%s" % (remote_name, key)
+    subprocess.check_call(["git", "config", "--local", "--add", new_key, value])
+
 def set_config(remote_name, key, value):
     new_key = "gpg-remote.%s.%s" % (remote_name, key)
     subprocess.check_call(["git", "config", "--local", new_key, value])
@@ -101,9 +114,23 @@ def get_config(remote_name, key):
     else:
         return None
 
-def unset_config(remote_name, key):
+def get_all_config(remote_name, key):
     new_key = "gpg-remote.%s.%s" % (remote_name, key)
-    subprocess.call(["git", "config", "--unset", new_key])
+    p = subprocess.Popen(["git", "config", "--get-all", new_key], stdout = subprocess.PIPE)
+    p.wait()
+    if p.returncode == 0:
+        array = p.communicate()[0].split("\n")
+        array = filter(lambda(x): x != None and x != "", array)
+        return map(lambda(x): x.strip(), array)
+    else:
+        return None
+
+def unset_config(remote_name, key, value = None):
+    new_key = "gpg-remote.%s.%s" % (remote_name, key)
+    if value == None:
+        subprocess.call(["git", "config", "--local", "--unset", new_key])
+    else:
+        subprocess.call(["git", "config", "--local", "--unset", new_key, value])
 
 def get_user_email():
     return subprocess.check_output(["git", "config", "user.email"]).strip()
@@ -176,7 +203,9 @@ def do_show(remote_name = None):
     else:
         print "gpg remote %s" % remote_name
         print "- URL: %s" % get_config(remote_name, "url")
-        print "- GPG Recipient: %s" % get_config(remote_name, "gpg-recipient")
+        print "- Recipients:"
+        for recipient in get_all_config(remote_name, "gpg-recipient"):
+            print "  - %s" % recipient
 
 def do_add(remote_name, remote_repo_path):
     """
@@ -191,14 +220,12 @@ def do_add(remote_name, remote_repo_path):
     ensure_path(path)
 
     # Set configuration.
-    user_email = get_user_email()
     set_config(remote_name, "url", remote_repo_path)
-    set_config(remote_name, "gpg-recipient", user_email)
-
     print(get_config(remote_name, "url"))
 
     # Success!
     print("Added gpg remote '%s'." % remote_name)
+    print("Remember to add recipients!")
 
 def do_remove(remote_name):
     """
@@ -216,6 +243,34 @@ def do_remove(remote_name):
 
     # Success!
     print("Removed gpg remote '%s'." % remote_name)
+
+def do_add_recipient(remote_name, recipient):
+    """
+    Add a recipient to the specified remote.
+    """
+
+    unset_config(remote_name, "gpg-recipient", recipient)
+    add_config(remote_name, "gpg-recipient", recipient)
+    print("Added %s to remote %s" % (recipient, remote_name))
+
+
+def do_remove_recipient(remote_name, recipient):
+    """
+    Remove a recipient from the specified remote.
+    """
+
+    unset_config(remote_name, "gpg-recipient", recipient)
+    print("Removed %s from remote %s" % (recipient, remote_name))
+
+def do_show_recipients(remote_name):
+    """
+    Show recipients for the specified remote.
+    """
+
+    recipients = get_all_config(remote_name, "gpg-recipient")
+    print("Recipients for remote %s:" % (remote_name))
+    for recipient in recipients:
+        print(" - %s" % recipient)
 
 def do_fetch_remote_lock(remote_name):
     """
@@ -252,6 +307,13 @@ def do_push_local_lock(remote_name):
     if subprocess.call(["rsync", local_lock_path, remote_lock_path], stdout = subprocess.PIPE, stderr = subprocess.PIPE) != 0:
         error_and_exit("Could not update the remote lock.")
 
+def recipients_to_arg_list(recipients):
+    l = []
+    for recipient in recipients:
+        l.append("--recipient")
+        l.append(recipient)
+    return(l)
+
 def do_fetch(remote_name):
     """
     Download the remote blob.
@@ -265,7 +327,12 @@ def do_fetch(remote_name):
     staging_path     = get_staging_path(remote_name)
     local_gpg_path   = os.path.join(staging_path, "git.gpg")
     local_repo_path  = os.path.join(staging_path, "git")
-    gpg_recipient    = get_config(remote_name, "gpg-recipient")
+    gpg_recipients   = get_all_config(remote_name, "gpg-recipient")
+
+    if len(gpg_recipients) == 0:
+        error_and_exit("This remote does not have any recipients.")
+    else:
+        gpg_recipients = recipients_to_arg_list(gpg_recipients)
 
     # Transfer files from remote.
     print("Fetching files. This may take a second.")
@@ -307,7 +374,7 @@ def do_fetch(remote_name):
     # Decrypt the files.
     if len(paths) > 0:
         print("Decrypting files.")
-        if subprocess.call(["gpg", "--decrypt-files", "--quiet", "--recipient", gpg_recipient] + paths) != 0:
+        if subprocess.call(["gpg", "--decrypt-files", "--quiet"] + gpg_recipients + paths) != 0:
             error_and_exit("Could not decrypt '%s'" % path)
 
     # Move files and clean up times.
@@ -356,7 +423,13 @@ def do_upload(remote_name):
     staging_path     = get_staging_path(remote_name)
     local_gpg_path   = os.path.join(staging_path, "git.gpg")
     local_repo_path  = os.path.join(staging_path, "git")
-    gpg_recipient    = get_config(remote_name, "gpg-recipient")
+    gpg_recipients   = get_all_config(remote_name, "gpg-recipient")
+
+    if len(gpg_recipients) == 0:
+        error_and_exit("This remote does not have any recipients.")
+    else:
+        gpg_recipients = recipients_to_arg_list(gpg_recipients)
+
 
     # Ensure paths.
     ensure_path(local_gpg_path)
@@ -403,7 +476,7 @@ def do_upload(remote_name):
     if len(paths) > 0:
         # Encrypt the files.
         print("Encrypting files...")
-        if subprocess.call(["gpg", "--batch", "--yes", "--encrypt-files", "--recipient", gpg_recipient] + paths) != 0:
+        if subprocess.call(["gpg", "--batch", "--yes", "--encrypt-files"] + gpg_recipients + paths) != 0:
             error_and_exit("Could not encrypt '%s'." % local_repo_path)
 
         # Move the files and clean up times.
@@ -489,8 +562,12 @@ script_name = sys.argv.pop(0)
 if len(sys.argv) == 0:
     do_show()
 else:
-    method = "do_" + sys.argv.pop(0)
+    command = sys.argv.pop(0)
+    method = "do_" + command.replace("-", "_")
     if method in locals():
-        locals()[method](*sys.argv)
+        try:
+            locals()[method](*sys.argv)
+        except TypeError:
+            error_and_exit("Invalid arguments for command '%s'." % command)
     else:
         print "'%s' is not a valid command. Run 'git gpg help' for help." % method

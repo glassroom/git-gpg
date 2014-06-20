@@ -34,9 +34,15 @@ Copy the `git-gpg` script to a directory in your path.
 
 ## Usage
 
-Add a a GPG-encrypted remote repository:
+Add a GPG-encrypted remote repository:
 
     git gpg add myremote user@server:~/files/project.gpg
+
+Add one or more GPG recipients:
+
+    git gpg add-recipient myremote you@host1
+    git gpg add-recipient myremote friend@host2
+    ...
 
 Push to the GPG-encrypted repository:
 
@@ -52,11 +58,7 @@ Pull from the GPG-encrypted repository:
     # You can use standard git options when pulling:
     git gpg pull --rebase myremote
 
-Note: By default, git-gpg will use the `user.email` setting in git as the GPG
-recipient. You can change this by editing the `.git/config` file, or by
-running the following command:
 
-    git config --local gpg-remotes.myremote.gpg-recipient new@recipient.com
 
 ## Other Approaches / Prior Art
 
