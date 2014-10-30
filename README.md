@@ -34,6 +34,8 @@ Copy the `git-gpg` script to a directory in your path.
 
 ## Usage
 
+### Setup
+
 Add a GPG-encrypted remote repository:
 
     git gpg add myremote user@server:~/files/project.gpg
@@ -44,20 +46,41 @@ Add one or more GPG recipients:
     git gpg add-recipient myremote friend@host2
     ...
 
+Show information about a GPG-encrypted repository, including recipients and branches:
+
+    git gpg show myremote
+
+### Push
+
 Push to the GPG-encrypted repository:
 
     git gpg push myremote master
 
-    # You can use standard git options when pushing:
+You can use the standard git command line options when pushing.
+
     git gpg push --verbose myremote master
+
+For example, specify the local branch and the remote branch.
+
+    git gpg push myremote local-branch:remote-branch
+
+Delete a branch.
+
+    git gpg push myremote :branch-to-delete
+
+### Pull
 
 Pull from the GPG-encrypted repository:
 
     git gpg pull myremote
 
-    # You can use standard git options when pulling:
+You can use the standard git command line options when pulling.
+
     git gpg pull --rebase myremote
 
+For example, you can specify the remote branch and local branch.
+
+    git gpg pull myremote remote-branch:local-branch
 
 
 ## Other Approaches / Prior Art

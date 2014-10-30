@@ -14,7 +14,7 @@ Usage:
     # Show gpg remotes.
     git gpg show
 
-    # Show details of a gpg remote.
+    # Show details of a gpg remote, including recipients and branches.
     git gpg show REMOTE_NAME
 
     # Add recipient.
@@ -22,9 +22,6 @@ Usage:
 
     # Remove recipient.
     git gpg remove-recipient REMOTE_NAME RECIPIENT
-
-    # Show recipients.
-    git gpg show-recipients REMOTE_NAME
 
     # Push to a remote. See `git help push` for options.
     git gpg push [OPTIONS] REMOTE_NAME [REFSPEC]
@@ -282,16 +279,6 @@ def do_remove_recipient(remote_name, recipient):
 
     unset_config(remote_name, "gpg-recipient", recipient)
     print("Removed %s from remote %s" % (recipient, remote_name))
-
-def do_show_recipients(remote_name):
-    """
-    Show recipients for the specified remote.
-    """
-
-    recipients = get_all_config(remote_name, "gpg-recipient")
-    print("Recipients for remote %s:" % (remote_name))
-    for recipient in recipients:
-        print(" - %s" % recipient)
 
 def do_fetch_remote_lock(remote_name):
     """
