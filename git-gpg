@@ -148,6 +148,13 @@ def get_remotes_list():
             remotes.append(m.group(1))
     return sorted(list(set(remotes)))
 
+def get_branches(remote_name):
+    heads_dir = os.path.join(get_staging_path(remote_name), "git", "refs", "heads")
+    if not os.path.exists(heads_dir):
+        return []
+    glob_dir = os.path.join(heads_dir, "*")
+    return [path.replace(heads_dir + "/", "") for path in glob.glob(glob_dir)]
+
 def generate_lock_value():
     s = get_user_email() + str(time.time()*1000000)
     return hashlib.md5(s).hexdigest()
@@ -203,9 +210,23 @@ def do_show(remote_name = None):
     else:
         print "gpg remote %s" % remote_name
         print "- URL: %s" % get_config(remote_name, "url")
-        print "- Recipients:"
-        for recipient in get_all_config(remote_name, "gpg-recipient"):
-            print "  - %s" % recipient
+
+        # Print recipients.
+        recipients = get_all_config(remote_name, "gpg-recipient")
+        if len(recipients) == 0:
+            print "- No recipients."
+        else:
+            print "- Recipients:"
+            for recipient in recipients:
+                print "  - %s" % recipient
+
+        branches = get_branches(remote_name)
+        if len(branches) == 0:
+            print "- No branches. (Try pulling?)"
+        else:
+            print "- Branches:"
+            for branch in branches:
+                print "  - %s" % branch
 
 def do_add(remote_name, remote_repo_path):
     """
