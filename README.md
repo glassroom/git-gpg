@@ -1,14 +1,10 @@
 # git-gpg
 
-git-gpg allows you to store private files in a GPG-encrypted remote repository.
+git-gpg provides git-based, GPG-encrypted distributed version control. Specifically, it is useful for collaborating with other trusted endpoints through *semi-trusted* or *untrusted* middle-points (e.g. - through a VPS on the cloud).
 
-How it works:
+At a high level, it encrypts the data objects in your .git directory, and then uploads those files to a remote directory using rsync-over-ssh. Simple.
 
-When you pull changes, git-gpg...
-
-1. Runs rsync to download encrypted .git database files from a remote server to a local directory.
-2. Decrypts the .git database files to form a "staging" repository.
-3. Pulls from the staging repository into your local repo.
+More specifically:
 
 When you push changes, git-gpg...
 
@@ -16,7 +12,11 @@ When you push changes, git-gpg...
 2. Encrypts the .git database files in the staging repository.
 3. Runs rsync to upload the encrypted .git database files to the remote server.
 
-Simple.
+When you pull changes, git-gpg...
+
+1. Runs rsync to download encrypted .git database files from a remote server to a local directory.
+2. Decrypts the .git database files to form a "staging" repository.
+3. Pulls from the staging repository into your local repo.
 
 ## Requirements
 
@@ -82,6 +82,13 @@ For example, you can specify the remote branch and local branch.
 
     git gpg pull myremote remote-branch:local-branch
 
+## Cautions
+
+1. git-gpg has not been thoroughly tested with every edge case. The author makes no guarantees of safety.
+2. git-gpg is a sledgehammer approach -- it encrypts your entire repository. If a user only need to encrypt one or two files containing security keys, git-gpg is probably not the right solution.
+3. git-gpg requires the user to learn new (and sometimes confusing) commands.
+4. git-gpg does not play well with existing social coding tools like GitHub. (That said, the goal of git-gpg is to *prevent* others from reading code, not encourage it.)
+5. git-gpg does not use git as a storage machanism on the remote endpoint.
 
 ## Other Approaches / Prior Art
 
@@ -145,9 +152,9 @@ anywhere except for on your own computer.
 
 #### Encrypted Patches
 
-A previous version of this utility attempted transmit and store encrypted
-patches rather treating the entire repository as a single blob. The was more
-bandwidth efficient than the current version, but it had two main disadvantages:
+A previous version of this utility attempted transmit and store
+encrypted code patches. The was more bandwidth efficient than the
+current git-gpg approach, but it had two main disadvantages:
 
 + Patches don't preserve the commit hash, so different consumers of the repo saw different hashes.
 + It is possible to have a valid git repository that cannot be re-created by exporting and re-applying all of its constituent patches in order.
