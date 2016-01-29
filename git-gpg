@@ -29,6 +29,9 @@ Usage:
     # Pull from a remote. See `git help push` for options.
     git gpg pull [OPTIONS] REMOTE_NAME [REFSPEC]
 
+    # Fetch latest code from a remote. See `git help fetch` for options.
+    git gpg fetch [OPTIONS] REMOTE_NAME [REFSPEC]
+
     # Show this screen.
     git gpg help
 """
@@ -41,7 +44,6 @@ import shutil
 import subprocess
 import sys
 import time
-
 
 def error_and_exit(s):
     print(s)
