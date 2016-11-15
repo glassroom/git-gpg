@@ -84,15 +84,15 @@ For example, you can specify the remote branch and local branch.
 
 ## Cautions
 
-1. git-gpg has not been thoroughly tested with every edge case. The author makes no guarantees of safety.
+1. git-gpg has not been thoroughly tested with every edge case. GlassRoom Software makes no guarantees of safety.
 2. git-gpg is a sledgehammer approach -- it encrypts your entire repository. If a user only need to encrypt one or two files containing security keys, git-gpg is probably not the right solution.
 3. git-gpg requires the user to learn new (and sometimes confusing) commands.
 4. git-gpg does not play well with existing social coding tools like GitHub. (That said, the goal of git-gpg is to *prevent* others from reading code, not encourage it.)
-5. git-gpg does not use git as a storage machanism on the remote endpoint.
+5. git-gpg does not use git as a storage mechanism on the remote endpoint.
 
 ## Other Approaches / Prior Art
 
-I experimented with a number of other solutions before arriving at this
+We experimented with a number of other solutions before arriving at this
 version of git-gpg, including the following:
 
 #### Git Clean / Smudge Filters
@@ -118,7 +118,7 @@ recommended:
 
 Another approach involves a [remote
 helper](https://www.kernel.org/pub/software/scm/git/docs/git-remote-
-helpers.html). The code is difficult to follow, but as far as I can tell, it
+helpers.html). The code is difficult to follow, but as far as we can tell, it
 creates a git repository inside of another git repository. The inner git
 repository stores encrypted [packfiles](http://git-scm.com/book/en/Git-
 Internals-Packfiles). The outer repository is used simply for a transport
@@ -131,7 +131,7 @@ mechanism. That may be totally wrong, as the code is quite complex.
 > Tony Hoare - winner of the 1980 Turing Award.
 > <http://en.wikiquote.org/wiki/C._A._R._Hoare>
 
-I don't trust software that is too complex. The lead developer seems to share
+We don't trust software that is too complex. The lead developer seems to share
 some of this sentiment:
 
 > I hope it interests someone, and maybe it even reaches the target of
@@ -163,4 +163,12 @@ The second disadvantage was obviously a show-stopper.
 
 # Licence
 
-git-gpg is released under the MIT License.
+git-gpg is released under the MIT License:
+
+Copyright (c) 2016 GlassRoom Software LLC
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
