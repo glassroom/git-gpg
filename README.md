@@ -84,7 +84,7 @@ For example, you can specify the remote branch and local branch.
 
 ## Cautions
 
-1. git-gpg has not been thoroughly tested with every edge case. GlassRoom Software makes no guarantees of safety.
+1. git-gpg has not been thoroughly tested with every edge case. We make no guarantees of safety.
 2. git-gpg is a sledgehammer approach -- it encrypts your entire repository. If a user only need to encrypt one or two files containing security keys, git-gpg is probably not the right solution.
 3. git-gpg requires the user to learn new (and sometimes confusing) commands.
 4. git-gpg does not play well with existing social coding tools like GitHub. (That said, the goal of git-gpg is to *prevent* others from reading code, not encourage it.)
