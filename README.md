@@ -1,3 +1,5 @@
+![GlassRoom Logo](https://github.com/glassroom/git-gpg/blob/master/glassroom-logo.png)
+
 # git-gpg
 
 git-gpg provides git-based, GPG-encrypted distributed version control. Specifically, it is useful for collaborating with other trusted endpoints through *semi-trusted* or *untrusted* middle-points (e.g. - through a VPS on the cloud).
