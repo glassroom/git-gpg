@@ -2,7 +2,7 @@
 
 # git-gpg
 
-git-gpg provides git-based, GPG-encrypted distributed version control. Specifically, it is useful for collaborating with other trusted endpoints through *semi-trusted* or *untrusted* middle-points (e.g. - through a VPS on the cloud).
+git-gpg provides git-based, GPG-encrypted distributed version control. Specifically, it is useful for collaborating with other trusted endpoints through *semi-trusted* or *untrusted* middle-points (e.g., through a VPS on the cloud).
 
 At a high level, it encrypts the data objects in your .git directory, and then uploads those files to a remote directory using rsync-over-ssh. Simple.
 
@@ -99,14 +99,9 @@ version of git-gpg, including the following:
 
 #### Git Clean / Smudge Filters
 
-Git provides a "clean filter" that will run right before a file is committed,
-and a "smudge filter" that will run right after a file is checked out. One of
-the intended use cases is to transform files from Unix line endings to and
-Windows line endings and vice versa.
+Git provides a "clean filter" that will run right before a file is committed, and a "smudge filter" that will run right after a file is checked out. One of the intended use cases is to transform files from Unix line endings to and Windows line endings and vice versa.
 
-Some clever folks have hacked this so that the client filter decrypts a file,
-and the smudge filter encrypts the file. While this is clever, it is not
-recommended:
+Some clever folks have hacked this so that the client filter decrypts a file, and the smudge filter encrypts the file. While this is clever, it is not recommended:
 
 > If your "clean" encrypts and "smudge" decrypts, it means you are refusing
 > all the benifit git offers.  You are making a pair of similar "smudged"
@@ -118,13 +113,7 @@ recommended:
 
 #### The git-remote-gcrypt Project
 
-Another approach involves a [remote
-helper](https://www.kernel.org/pub/software/scm/git/docs/git-remote-
-helpers.html). The code is difficult to follow, but as far as we can tell, it
-creates a git repository inside of another git repository. The inner git
-repository stores encrypted [packfiles](http://git-scm.com/book/en/Git-
-Internals-Packfiles). The outer repository is used simply for a transport
-mechanism. That may be totally wrong, as the code is quite complex.
+Another approach involves a [remote helper](https://www.kernel.org/pub/software/scm/git/docs/git-remote-helpers.html). The code is difficult to follow, but as far as we can tell, it creates a git repository inside of another git repository. The inner git repository stores encrypted [packfiles](http://git-scm.com/book/en/Git-Internals-Packfiles). The outer repository is used simply for a transport mechanism. That may be totally wrong, as the code is quite complex.
 
 > There are two ways of constructing a software design: One way is to make it so
 > simple that there are obviously no deficiencies, and the other way is to make
@@ -133,8 +122,7 @@ mechanism. That may be totally wrong, as the code is quite complex.
 > Tony Hoare - winner of the 1980 Turing Award.
 > <http://en.wikiquote.org/wiki/C._A._R._Hoare>
 
-We don't trust software that is too complex. The lead developer seems to share
-some of this sentiment:
+We don't trust software that is too complex. The lead developer seems to share some of this sentiment:
 
 > I hope it interests someone, and maybe it even reaches the target of
 > being both usable and secure. It also helps me if you point out
@@ -145,18 +133,11 @@ some of this sentiment:
 
 #### An Encrypted Remote FileSystem
 
-Another approach is to store the remote git repo on an encrypted filesystem,
-and then mount it when pushing or pulling code. An intruder must time their
-attack to happen when the code is decrypted in memory. This raises the
-difficulty level, but still leaves a significant weak surface. If you are
-*truly* paranoid about your code, then it's dangerous to *ever* decrypt it
-anywhere except for on your own computer.
+Another approach is to store the remote git repo on an encrypted filesystem, and then mount it when pushing or pulling code. An intruder must time their attack to happen when the code is decrypted in memory. This raises the difficulty level, but still leaves a significant weak surface. If you are *truly* paranoid about your code, then it's dangerous to *ever* decrypt it anywhere except for on your own computer.
 
 #### Encrypted Patches
 
-A previous version of this utility attempted transmit and store
-encrypted code patches. The was more bandwidth efficient than the
-current git-gpg approach, but it had two main disadvantages:
+A previous version of this utility attempted transmit and store encrypted code patches. The was more bandwidth efficient than the current git-gpg approach, but it had two main disadvantages:
 
 + Patches don't preserve the commit hash, so different consumers of the repo saw different hashes.
 + It is possible to have a valid git repository that cannot be re-created by exporting and re-applying all of its constituent patches in order.
