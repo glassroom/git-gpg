@@ -113,7 +113,7 @@ Some clever folks have hacked this so that the client filter decrypts a file, an
 
 #### The git-remote-gcrypt Project
 
-Another approach involves a [remote helper](https://www.kernel.org/pub/software/scm/git/docs/git-remote-helpers.html). The code is difficult to follow, but as far as we can tell, it creates a git repository inside of another git repository. The inner git repository stores encrypted [packfiles](http://git-scm.com/book/en/Git-Internals-Packfiles). The outer repository is used simply for a transport mechanism. That may be totally wrong, as the code is quite complex.
+Another approach involves a [remote helper](https://www.kernel.org/pub/software/scm/git/docs/gitremote-helpers.html). The [git-remote-gcrypt](https://spwhitton.name/tech/code/git-remote-gcrypt/) code is difficult to follow, but as far as we can tell, it creates a git repository inside of another git repository. The inner git repository stores encrypted [packfiles](http://git-scm.com/book/en/Git-Internals-Packfiles). The outer repository is used simply for a transport mechanism. That may be totally wrong, as the code is quite complex.
 
 > There are two ways of constructing a software design: One way is to make it so
 > simple that there are obviously no deficiencies, and the other way is to make
